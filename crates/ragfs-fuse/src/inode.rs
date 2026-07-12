@@ -140,6 +140,8 @@ pub struct InodeTable {
     real_ino_map: HashMap<u64, u64>,
     /// Query string -> inode (for query results)
     query_to_ino: HashMap<String, u64>,
+    /// Source path -> inode (for .similar lookups)
+    similar_to_ino: HashMap<PathBuf, u64>,
     /// Next available inode
     next_ino: u64,
 }
@@ -153,6 +155,7 @@ impl InodeTable {
             path_to_ino: HashMap::new(),
             real_ino_map: HashMap::new(),
             query_to_ino: HashMap::new(),
+            similar_to_ino: HashMap::new(),
             next_ino: FIRST_REAL_INO,
         };
         table.init_virtual_inodes();
@@ -499,6 +502,32 @@ impl InodeTable {
         );
 
         self.query_to_ino.insert(query, ino);
+
+        ino
+    }
+
+    /// Get or create an inode for a .similar lookup by source path.
+    pub fn get_or_create_similar_lookup(&mut self, parent: u64, source_path: PathBuf) -> u64 {
+        if let Some(&ino) = self.similar_to_ino.get(&source_path) {
+            return ino;
+        }
+
+        let ino = self.next_ino;
+        self.next_ino += 1;
+
+        self.inodes.insert(
+            ino,
+            InodeEntry {
+                ino,
+                kind: InodeKind::SimilarLookup {
+                    source_path: source_path.clone(),
+                },
+                parent,
+                lookup_count: 0,
+            },
+        );
+
+        self.similar_to_ino.insert(source_path, ino);
 
         ino
     }

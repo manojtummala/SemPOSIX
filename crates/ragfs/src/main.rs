@@ -374,7 +374,9 @@ async fn main() -> Result<()> {
                 options.push(fuser::MountOption::AllowOther);
             }
 
-            // Mount
+            // Mount FUSE on a dedicated OS thread so that block_on calls
+            // inside FUSE callbacks don't panic (can't call block_on from
+            // within a tokio runtime context).
             if foreground {
                 info!("Running in foreground (Ctrl+C to unmount)");
                 info!("Try: cat {:?}/.ragfs/.index", mountpoint);
@@ -382,7 +384,18 @@ async fn main() -> Result<()> {
                     "Reindex: echo 'path/to/file' > {:?}/.ragfs/.reindex",
                     mountpoint
                 );
-                fuser::mount2(fs, &mountpoint, &options)?;
+                let mount_result = std::thread::scope(|s| {
+                    let handle = s.spawn(|| fuser::mount2(fs, &mountpoint, &options));
+                    // Keep the reindex handler alive on the tokio runtime
+                    // by parking the main thread until FUSE unmounts
+                    let _ = &reindex_handler;
+                    match handle.join() {
+                        Ok(Ok(())) => Ok(()),
+                        Ok(Err(e)) => Err(anyhow::anyhow!("FUSE mount error: {e}")),
+                        Err(_) => Err(anyhow::anyhow!("FUSE mount thread panicked")),
+                    }
+                });
+                mount_result?;
             } else {
                 // Daemonize: fork to background
                 let pid_path = get_pid_path(&source)?;
@@ -410,8 +423,8 @@ async fn main() -> Result<()> {
 
                 match daemonize.start() {
                     Ok(()) => {
-                        // We're now in the daemon process
-                        // Re-initialize tracing to log file since we've forked
+                        // We're now in the daemon process (no tokio runtime)
+                        // Safe to call mount2 directly
                         fuser::mount2(fs, &mountpoint, &options)?;
                     }
                     Err(e) => {

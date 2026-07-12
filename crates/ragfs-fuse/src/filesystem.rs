@@ -667,6 +667,66 @@ impl Filesystem for RagFs {
             return;
         }
 
+        // Handle .similar directory lookups (find files similar to a source path)
+        if parent == SIMILAR_DIR_INO {
+            let source_path = name_str.to_string();
+            let source = self.source.clone();
+            let semantic = self.semantic_manager.clone();
+
+            let full_path = {
+                let p = std::path::Path::new(&source_path);
+                if p.is_absolute() {
+                    std::path::PathBuf::from(&source_path)
+                } else {
+                    source.join(&source_path)
+                }
+            };
+
+            let lookup_path = full_path.clone();
+            let result = self.runtime.block_on(async move {
+                semantic.find_similar(&lookup_path).await
+            });
+
+            let content = match result {
+                Ok(similar_result) => {
+                    let json: Vec<_> = similar_result.similar.iter().map(|s| {
+                        serde_json::json!({
+                            "file": s.path.to_string_lossy(),
+                            "score": s.similarity,
+                            "preview": s.preview,
+                        })
+                    }).collect();
+                    let output = serde_json::json!({
+                        "source": similar_result.source.to_string_lossy(),
+                        "results": json,
+                    });
+                    serde_json::to_string_pretty(&output)
+                        .unwrap_or_default()
+                        .into_bytes()
+                }
+                Err(e) => {
+                    let err = serde_json::json!({
+                        "source": source_path,
+                        "error": e,
+                    });
+                    serde_json::to_string_pretty(&err)
+                        .unwrap_or_default()
+                        .into_bytes()
+                }
+            };
+
+            let mut inodes = self.runtime.block_on(self.inodes.write());
+            let ino = inodes.get_or_create_similar_lookup(SIMILAR_DIR_INO, full_path);
+            drop(inodes);
+
+            let attr = self.make_attr(ino, FileType::RegularFile, content.len() as u64);
+            let mut cache = self.runtime.block_on(self.content_cache.write());
+            cache.insert(ino, content);
+
+            reply.entry(&TTL, &attr, 0);
+            return;
+        }
+
         // Handle lookups in real directories
         let inodes = self.runtime.block_on(self.inodes.read());
         if let Some(entry) = inodes.get(parent)
@@ -1517,8 +1577,38 @@ impl Filesystem for RagFs {
             parent, name_str, mode
         );
 
-        // Prevent creating files in virtual directories
+        // Allow writes to known writable virtual files (e.g. .reindex, .ops/.create)
         if parent < FIRST_REAL_INO && parent != ROOT_INO {
+            let writable_virtual = matches!(
+                (parent, name_str.as_ref()),
+                (RAGFS_DIR_INO, ".reindex")
+                    | (OPS_DIR_INO, ".create")
+                    | (OPS_DIR_INO, ".delete")
+                    | (OPS_DIR_INO, ".move")
+                    | (OPS_DIR_INO, ".batch")
+                    | (SAFETY_DIR_INO, ".undo")
+                    | (SEMANTIC_DIR_INO, ".organize")
+                    | (SEMANTIC_DIR_INO, ".approve")
+                    | (SEMANTIC_DIR_INO, ".reject")
+            );
+            if writable_virtual {
+                // Return the existing virtual file inode for open+write
+                let existing_ino = match (parent, name_str.as_ref()) {
+                    (RAGFS_DIR_INO, ".reindex") => REINDEX_FILE_INO,
+                    (OPS_DIR_INO, ".create") => OPS_CREATE_INO,
+                    (OPS_DIR_INO, ".delete") => OPS_DELETE_INO,
+                    (OPS_DIR_INO, ".move") => OPS_MOVE_INO,
+                    (OPS_DIR_INO, ".batch") => OPS_BATCH_INO,
+                    (SAFETY_DIR_INO, ".undo") => UNDO_FILE_INO,
+                    (SEMANTIC_DIR_INO, ".organize") => ORGANIZE_FILE_INO,
+                    (SEMANTIC_DIR_INO, ".approve") => APPROVE_FILE_INO,
+                    (SEMANTIC_DIR_INO, ".reject") => REJECT_FILE_INO,
+                    _ => unreachable!(),
+                };
+                let attr = self.make_attr(existing_ino, FileType::RegularFile, 0);
+                reply.created(&TTL, &attr, 0, 0, 0);
+                return;
+            }
             reply.error(EPERM);
             return;
         }
@@ -1861,10 +1951,29 @@ impl Filesystem for RagFs {
     ) {
         debug!("setattr: ino={}, size={:?}", ino, size);
 
-        // Don't allow setattr on virtual files
+        // Allow truncate (size=0) on writable virtual files, block everything else
         if ino < FIRST_REAL_INO {
-            reply.error(EPERM);
-            return;
+            let writable_virtual = matches!(
+                ino,
+                REINDEX_FILE_INO
+                    | OPS_CREATE_INO
+                    | OPS_DELETE_INO
+                    | OPS_MOVE_INO
+                    | OPS_BATCH_INO
+                    | UNDO_FILE_INO
+                    | ORGANIZE_FILE_INO
+                    | APPROVE_FILE_INO
+                    | REJECT_FILE_INO
+            );
+            if writable_virtual && size == Some(0) {
+                // Truncate is fine, return attr for the virtual file
+                let attr = self.make_attr(ino, FileType::RegularFile, 0);
+                reply.attr(&TTL, &attr);
+                return;
+            } else {
+                reply.error(EPERM);
+                return;
+            }
         }
 
         // Get the file path
