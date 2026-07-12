@@ -1,276 +1,135 @@
-# RAGFS
+# SemPOSIX
+
+> An OS-native semantic filesystem for AI agents — where `cat` is search and `ls` is discovery.
 
 [![CI](https://github.com/Venere-Labs/ragfs/actions/workflows/ci.yml/badge.svg)](https://github.com/Venere-Labs/ragfs/actions/workflows/ci.yml)
-[![Security Audit](https://github.com/Venere-Labs/ragfs/actions/workflows/security.yml/badge.svg)](https://github.com/Venere-Labs/ragfs/actions/workflows/security.yml)
-[![codecov](https://codecov.io/gh/Venere-Labs/ragfs/branch/main/graph/badge.svg)](https://codecov.io/gh/Venere-Labs/ragfs)
-[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://Venere-Labs.github.io/ragfs/ragfs/)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.88%2B-orange.svg)](https://www.rust-lang.org)
 
-An agentic FUSE filesystem that makes file management safe and structured for LLM agents. Includes JSON-based operations with undo support, complete audit logging, and AI-powered features like semantic search, auto-organization, and deduplication.
+SemPOSIX extends the POSIX filesystem with semantic awareness for AI agents. Every file operation — search, discover, organize — goes through a vector embedding layer that understands **meaning**, not just filenames. No APIs, no SDKs. Just `cat`, `echo`, and `ls`.
 
-## Features
+**Built on [ragfs](https://github.com/Venere-Labs/ragfs)** by Venere-Labs.
 
-- **Agent File Operations** - Structured file ops with JSON feedback via `.ops/` interface
-- **Safety Layer** - Soft delete, audit logging, and undo support via `.safety/`
-- **AI-Powered Management** - Auto-organization, deduplication, and cleanup via `.semantic/`
-- **Semantic Search** - Query files by meaning using vector similarity search
-- **Local Embeddings** - Runs entirely offline using the `gte-small` model via Candle
-- **FUSE Integration** - Mount indexed directories as a virtual filesystem
-- **Real-time Indexing** - Watch directories for changes and update the index automatically
-- **Multimodal Support** - Extract content from text, code, markdown, PDF, and images
-- **Code-aware Chunking** - Syntax-aware splitting using tree-sitter for source code
-- **Hybrid Search** - Combine vector similarity with full-text search
-- **MCP Server** - Claude Desktop integration for AI assistants
-- **Comprehensive Testing** - 270+ tests across all crates ensuring reliability
+---
 
-## Feature Status
+## The Idea
 
-| Feature | Status | Notes |
-|---------|--------|-------|
-| CLI (index, query, status) | Stable | Core functionality |
-| FUSE mount | Stable | Linux only |
-| Semantic search | Stable | Vector similarity with LanceDB |
-| Hybrid search | Stable | Vector + full-text |
-| Text extraction | Stable | 40+ formats |
-| Code chunking | Stable | Tree-sitter based |
-| PDF extraction | Stable | Text + embedded images |
-| Agent operations (.ops/) | Stable | JSON feedback, batch support |
-| Safety layer (.safety/) | Stable | Trash, history, undo |
-| Semantic operations (.semantic/) | Beta | Organize, dedupe, cleanup |
-| Python bindings | Beta | PyO3 based |
-| MCP server | Beta | Claude Desktop integration |
-| Image captioning | Experimental | Optional, requires `vision` feature |
-
-## Use Cases
-
-**Ideal for:**
-- LLM agents managing files (Claude, GPT, local models)
-- Automated file organization and cleanup
-- Safe file operations with audit trail
-- Code repositories (1K-50K files)
-- Documentation collections
-- Research notes and papers
-- Local-first semantic search
-
-**Limitations:**
-- Linux only (FUSE requirement)
-- Embedding model requires ~500MB disk
-- Large repositories (100K+ files) may need tuning
-
-## Requirements
-
-- Rust 1.88 or later
-- Linux with FUSE support (`libfuse-dev` on Debian/Ubuntu, `fuse` on Arch)
-- ~500MB disk space for the embedding model (downloaded on first run)
-
-## Installation
+AI agents already know how to use the filesystem. They run `cat` to read, `ls` to list, `echo` to write. SemPOSIX hijacks these familiar operations and makes them semantically powerful:
 
 ```bash
-# Clone the repository
-git clone https://github.com/Venere-Labs/ragfs.git
-cd ragfs
+# Agent searches for authentication code
+cat .ragfs/.query/authentication    # → ranked results with cosine scores
 
-# Build in release mode
-cargo build --release
+# Agent discovers related files
+cat .ragfs/.similar src/auth.rs    # → files ranked by semantic similarity
 
-# Install to ~/.cargo/bin
-cargo install --path crates/ragfs
+# Agent reindexes after edits
+echo "src/auth.rs" > .ragfs/.reindex   # → triggers embed + store pipeline
 ```
+
+Every operation is a standard POSIX call. Any agent, any language, any framework — if it can `cat`, it can do semantic search.
+
+---
+
+## Current Features
+
+| Operation | Command | What it does |
+|-----------|---------|-------------|
+| **Semantic search** | `cat .ragfs/.query/<intent>` | Vector similarity search ranked by cosine score |
+| **Find similar** | `cat .ragfs/.similar/<file>` | Discover files semantically related to a source |
+| **Index status** | `cat .ragfs/.index` | Show indexed files, chunks, embeddings |
+| **Reindex** | `echo "file" > .ragfs/.reindex` | Trigger extraction→chunk→embed→store pipeline |
+| **Config** | `cat .ragfs/.config` | Current system configuration |
+| **Help** | `cat .ragfs/.help` | Usage documentation |
+
+### Under the Hood
+
+- **Embeddings**: `gte-small` (384-dim) via Candle — runs 100% locally, no API calls
+- **Vector store**: LanceDB (Apache Arrow columnar format)
+- **FUSE**: Linux kernel filesystem module — mount appears as real filesystem
+- **Chunking**: tree-sitter AST-aware splitting for source code
+
+---
 
 ## Quick Start
 
-### Index a directory
-
 ```bash
-# Index all files in a directory
-ragfs index ~/Documents
+# Clone and build
+git clone git@github.com:manojtummala/SemPOSIX.git
+cd SemPOSIX
+cargo build --release
 
-# Watch for changes (continuous indexing)
-ragfs index ~/Documents --watch
+# Mount a project
+cargo run --release -- mount --foreground ./my-project ./mount-point
+
+# In another terminal — search it
+echo "my-project/src/main.rs" > ./mount-point/.ragfs/.reindex
+cat ./mount-point/.ragfs/.query/database connection
+cat ./mount-point/.ragfs/.similar src/main.rs
 ```
 
-### Search your files
-
-```bash
-# Semantic search
-ragfs query ~/Documents "machine learning implementation"
-
-# Get more results
-ragfs query ~/Documents "authentication logic" --limit 20
-
-# JSON output for scripting
-ragfs query ~/Documents "database connection" --format json
-```
-
-### Mount as a filesystem
-
-```bash
-# Create a mount point
-mkdir ~/ragfs-mount
-
-# Mount the indexed directory
-ragfs mount ~/Documents ~/ragfs-mount --foreground
-```
-
-### Check index status
-
-```bash
-ragfs status ~/Documents
-```
-
-### Agent file operations (via FUSE mount)
-
-```bash
-# Create a file with feedback
-echo -e "docs/new.md\n# New Document" > ~/ragfs-mount/.ragfs/.ops/.create
-cat ~/ragfs-mount/.ragfs/.ops/.result  # JSON with undo_id
-
-# Delete a file (soft delete to trash)
-echo "docs/old.md" > ~/ragfs-mount/.ragfs/.ops/.delete
-
-# Find similar files
-echo "src/main.rs" > ~/ragfs-mount/.ragfs/.semantic/.similar
-cat ~/ragfs-mount/.ragfs/.semantic/.similar
-
-# Undo an operation
-echo "<undo_id>" > ~/ragfs-mount/.ragfs/.safety/.undo
-```
-
-## CLI Reference
-
-```
-ragfs [OPTIONS] <COMMAND>
-
-Commands:
-  mount   Mount a directory as a RAGFS filesystem
-  index   Index a directory (without mounting)
-  query   Query the index
-  status  Show index status
-  config  Manage configuration
-
-Options:
-  -c, --config <FILE>    Config file path [default: ~/.config/ragfs/config.toml]
-  -v, --verbose          Enable verbose logging
-  -f, --format <FORMAT>  Output format: text, json [default: text]
-  -h, --help             Print help
-  -V, --version          Print version
-```
-
-### mount
-
-```
-ragfs mount <SOURCE> <MOUNTPOINT> [OPTIONS]
-
-Arguments:
-  <SOURCE>      Source directory to index
-  <MOUNTPOINT>  Mount point
-
-Options:
-  -f, --foreground  Run in foreground (don't daemonize)
-      --allow-other Allow other users to access the mount
-```
-
-### index
-
-```
-ragfs index <PATH> [OPTIONS]
-
-Arguments:
-  <PATH>  Directory to index
-
-Options:
-  -f, --force  Force reindexing of all files
-  -w, --watch  Watch for changes after initial indexing
-```
-
-### query
-
-```
-ragfs query <PATH> <QUERY> [OPTIONS]
-
-Arguments:
-  <PATH>   Path to indexed directory
-  <QUERY>  Query string
-
-Options:
-  -l, --limit <LIMIT>  Maximum results [default: 10]
-```
-
-### status
-
-```
-ragfs status <PATH>
-
-Arguments:
-  <PATH>  Path to indexed directory
-```
-
-### config
-
-```
-ragfs config <ACTION>
-
-Actions:
-  show  Display current configuration
-  init  Print sample config file
-  path  Print config file path
-```
+---
 
 ## Architecture
 
-RAGFS is organized as a Rust workspace with specialized crates:
+```
+Agent/CLI             FUSE Layer                Pipeline              Storage
+    |                    |                        |                     |
+    | cat .query/X     → | lookup(QUERY_DIR)     |                     |
+    |                    |  execute_query() ----→ | embed query text    |
+    |                    |                        | vector_search() ---→| LanceDB
+    |                    |                        |←-- ranked results --|
+    |←-- JSON response   | cache in content_cache |                     |
+    |                    |                        |                     |
+    | cat .similar/F   → | lookup(SIMILAR_DIR)   |                     |
+    |                    |  find_similar() ------→| embed file content  |
+    |                    |                        | vector_search() ---→| LanceDB
+    |                    |                        |←-- ranked results --|
+    |←-- JSON response   | cache in content_cache |                     |
+```
 
-| Crate | Description |
-|-------|-------------|
-| `ragfs` | CLI application |
-| `ragfs-core` | Core traits and types |
-| `ragfs-fuse` | FUSE filesystem implementation |
-| `ragfs-index` | File indexing engine |
-| `ragfs-chunker` | Document chunking strategies |
-| `ragfs-embed` | Embedding generation (Candle) |
-| `ragfs-extract` | Content extraction |
-| `ragfs-store` | Vector storage (LanceDB) |
-| `ragfs-query` | Query execution |
+### Workspace Crates
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture documentation.
+| Crate | Role |
+|-------|------|
+| `ragfs` | CLI binary (entry point) |
+| `ragfs-core` | Traits and types (`VectorStore`, `Embedder`, `Chunker`) |
+| `ragfs-fuse` | FUSE filesystem, virtual directory routing, inode management |
+| `ragfs-store` | LanceDB vector storage |
+| `ragfs-embed` | Local embedding generation (Candle + gte-small) |
+| `ragfs-extract` | Content extraction (40+ formats) |
+| `ragfs-chunker` | Document chunking (tree-sitter for code) |
+| `ragfs-index` | Pipeline orchestration and file watching |
+| `ragfs-query` | Query parsing and execution |
 
-## Documentation
+---
 
-- [Getting Started](docs/GETTING_STARTED.md) - 5-minute tutorial
-- [User Guide](docs/USER_GUIDE.md) - Complete CLI reference
-- [Configuration](docs/CONFIGURATION.md) - All config options
-- [Performance Guide](docs/PERFORMANCE.md) - Tuning and optimization
-- [Troubleshooting](docs/TROUBLESHOOTING.md) - Common issues and solutions
-- [Architecture](docs/ARCHITECTURE.md) - Technical deep-dive
-- [Architecture Decisions](docs/ARCHITECTURE_DECISIONS.md) - Why we made these choices
-- [API Reference](docs/API.md) - Library usage and types
-- [Python Bindings](docs/PYTHON.md) - Python SDK and framework integrations
-- [MCP Server](docs/MCP.md) - Claude Desktop integration
-- [Development Guide](docs/DEVELOPMENT.md) - Contributing to RAGFS
+## Roadmap
 
-## How It Works
+| Phase | Feature | Status |
+|-------|---------|--------|
+| 1 | FUSE mount, virtual dirs, `.query/` semantic search | ✅ Done |
+| 2 | `.similar/<file>` — find files by semantic similarity | ✅ Done |
+| 3 | TrieHI — scoped vector search (dir metadata in LanceDB) | 🔜 Next |
+| 4 | Shadow files — `.L0` (summary), `.L1` (declarations), `.L2` (full) | Planned |
+| 5 | AST-aware incremental indexing (tree-sitter diff) | Planned |
+| 6 | End-to-end evaluation on real codebases | Planned |
 
-1. **Extraction** - Content is extracted from files based on their MIME type
-2. **Chunking** - Text is split into overlapping chunks (~512 tokens each)
-3. **Embedding** - Each chunk is converted to a 384-dimensional vector using the `gte-small` model
-4. **Storage** - Vectors are stored in LanceDB for efficient similarity search
-5. **Search** - Queries are embedded and matched against stored vectors using cosine similarity
+See [SEMPOSIX.md](SEMPOSIX.md) for detailed design documents.
+See [DEMO.md](DEMO.md) for a runnable demo with verified outputs.
 
-## Storage Locations
+---
 
-- **Indices**: `~/.local/share/ragfs/indices/{hash}/index.lance`
-- **Models**: `~/.local/share/ragfs/models/`
+## Requirements
+
+- Rust 1.88+
+- Linux with FUSE support (`libfuse-dev`)
+- ~500MB disk for the embedding model (downloaded on first run)
 
 ## License
 
-Licensed under either of:
+Licensed under either of [Apache License 2.0](LICENSE-APACHE) or [MIT License](LICENSE-MIT) at your option.
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+---
 
-at your option.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+*Originally forked from [Venere-Labs/ragfs](https://github.com/Venere-Labs/ragfs).*
