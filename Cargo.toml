@@ -10,7 +10,6 @@ members = [
     "crates/ragfs-extract",
     "crates/ragfs-store",
     "crates/ragfs-query",
-    "crates/ragfs-python",
 ]
 
 [workspace.package]
