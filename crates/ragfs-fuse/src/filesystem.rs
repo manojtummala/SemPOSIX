@@ -683,19 +683,23 @@ impl Filesystem for RagFs {
             };
 
             let lookup_path = full_path.clone();
-            let result = self.runtime.block_on(async move {
-                semantic.find_similar(&lookup_path).await
-            });
+            let result = self
+                .runtime
+                .block_on(async move { semantic.find_similar(&lookup_path).await });
 
             let content = match result {
                 Ok(similar_result) => {
-                    let json: Vec<_> = similar_result.similar.iter().map(|s| {
-                        serde_json::json!({
-                            "file": s.path.to_string_lossy(),
-                            "score": s.similarity,
-                            "preview": s.preview,
+                    let json: Vec<_> = similar_result
+                        .similar
+                        .iter()
+                        .map(|s| {
+                            serde_json::json!({
+                                "file": s.path.to_string_lossy(),
+                                "score": s.similarity,
+                                "preview": s.preview,
+                            })
                         })
-                    }).collect();
+                        .collect();
                     let output = serde_json::json!({
                         "source": similar_result.source.to_string_lossy(),
                         "results": json,
@@ -1582,14 +1586,9 @@ impl Filesystem for RagFs {
             let writable_virtual = matches!(
                 (parent, name_str.as_ref()),
                 (RAGFS_DIR_INO, ".reindex")
-                    | (OPS_DIR_INO, ".create")
-                    | (OPS_DIR_INO, ".delete")
-                    | (OPS_DIR_INO, ".move")
-                    | (OPS_DIR_INO, ".batch")
+                    | (OPS_DIR_INO, ".create" | ".delete" | ".move" | ".batch")
                     | (SAFETY_DIR_INO, ".undo")
-                    | (SEMANTIC_DIR_INO, ".organize")
-                    | (SEMANTIC_DIR_INO, ".approve")
-                    | (SEMANTIC_DIR_INO, ".reject")
+                    | (SEMANTIC_DIR_INO, ".organize" | ".approve" | ".reject")
             );
             if writable_virtual {
                 // Return the existing virtual file inode for open+write
@@ -1970,10 +1969,9 @@ impl Filesystem for RagFs {
                 let attr = self.make_attr(ino, FileType::RegularFile, 0);
                 reply.attr(&TTL, &attr);
                 return;
-            } else {
-                reply.error(EPERM);
-                return;
             }
+            reply.error(EPERM);
+            return;
         }
 
         // Get the file path

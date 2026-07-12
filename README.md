@@ -2,7 +2,7 @@
 
 > An OS-native semantic filesystem for AI agents — where `cat` is search and `ls` is discovery.
 
-[![CI](https://github.com/Venere-Labs/ragfs/actions/workflows/ci.yml/badge.svg)](https://github.com/Venere-Labs/ragfs/actions/workflows/ci.yml)
+[![CI](https://github.com/manojtummala/SemPOSIX/actions/workflows/ci.yml/badge.svg)](https://github.com/manojtummala/SemPOSIX/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.88%2B-orange.svg)](https://www.rust-lang.org)
 
