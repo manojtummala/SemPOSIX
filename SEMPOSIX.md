@@ -393,7 +393,7 @@ cat .index:       {"total_chunks":2,"total_files":2}
 
 ---
 
-## 6. Phase 3: TrieHI Integration in LanceDB
+## 6. Phase 3: TrieHI Integration in LanceDB ✅ (Verified 2026-07-13)
 
 **Goal:** Restrict vector searches to directory subscopes using a prefix-tree key in LanceDB metadata, avoiding expensive post-filtering.
 
@@ -404,58 +404,61 @@ Current search is global across all indexed files. When an agent works in `src/a
 ```
 /mnt/semfs/src/auth/.similarity/login.rs
     -> Only searches chunks whose path starts with "src/auth/"
-    -> Uses LanceDB metadata filter on dir_prefix field
+    -> Uses LanceDB metadata filter on dir_path field
 ```
 
-### 5.2 Schema Extension
+### 5.2 Schema Extension ✅
 
-Add to `chunks_schema()` in `crates/ragfs-store/src/schema.rs`:
+Added to `chunks_schema()` in `crates/ragfs-store/src/schema.rs`:
 
 ```rust
 // Hierarchical path components for TrieHI
-Field::new("dir_path", DataType::Utf8, false),      // "src/auth"
+Field::new("dir_path", DataType::Utf8, false),      // "src" (relative to root)
 Field::new("dir_depth", DataType::UInt16, false),    // depth in tree
-Field::new("path_components", DataType::Utf8, false), // comma-separated: "src,auth,login.rs"
+Field::new("path_components", DataType::Utf8, false), // comma-separated: "src,auth.rs"
 ```
 
-### 5.3 Index-time: Building the Trie Keys
+### 5.3 Index-time: Building the Trie Keys ✅
 
-In `crates/ragfs-index/src/indexer.rs`, when indexing a file at path `P = (d1, d2, ..., dk)`:
+In `crates/ragfs-index/src/indexer.rs`, `build_chunk()` now computes relative paths:
 
 ```
-dir_path = "d1/d2/.../d_{k-1}"
-dir_depth = k - 1
-path_components = "d1,d2,...,dk"
+file_path = /project/src/auth.rs, root = /project
+dir_path = "src"                  (parent of rel_path)
+dir_depth = 1                     (component count - 1)
+path_components = "src,auth.rs"   (comma-separated)
 ```
 
-Store these as metadata fields in each chunk.
+### 5.4 Query-time: Scoped Search ✅
 
-### 5.4 Query-time: Scoped Search
-
-New search method in `ragfs-store/src/lancedb.rs`:
-
-```rust
-async fn search_scoped(
-    &self,
-    query: &SearchQuery,
-    scope_prefix: Option<&str>,  // e.g., "src/auth/"
-) -> Result<Vec<SearchResult>, StoreError>
+Added `scope_prefix: Option<String>` to `SearchQuery` struct. When set, LanceDB applies:
+```
+dir_path = '{scope}' OR dir_path LIKE '{scope}/%'
 ```
 
-When `scope_prefix` is provided, add a LanceDB filter:
+Implemented in both `search()` and `hybrid_search()` via `only_if()` predicate pushdown.
+
+CLI access: `ragfs query <path> "query" --scope src/`
+
+### 5.5 Verified Results
+
 ```
-WHERE dir_path STARTS_WITH 'src/auth/'
+TEST: Global query "authentication" → 6 results (all dirs)
+TEST: --scope src/                   → 3 results (src only)
+TEST: --scope docs/                  → 2 results (docs only)
+TEST: --scope tests/                 → 1 result  (tests only)
+TEST: --scope src (no slash)         → 3 results (works same)
+TEST: --scope src/ + "database"      → 3 results (src only, database query)
 ```
 
-This uses LanceDB's native predicate pushdown to avoid loading irrelevant vectors.
+### 5.6 Files Modified
 
-### 5.5 Files to Modify
-
-- `crates/ragfs-store/src/schema.rs` - Add dir_path, dir_depth, path_components fields
-- `crates/ragfs-store/src/lancedb.rs` - Add `search_scoped()` method, update `upsert_chunks()`
-- `crates/ragfs-core/src/types.rs` - Add fields to `Chunk` struct
-- `crates/ragfs-index/src/indexer.rs` - Populate new fields during indexing
-- `crates/ragfs-fuse/src/filesystem.rs` - Parse scope from `.similarity/<scope>/` path
+- `crates/ragfs-core/src/types.rs` - Added `dir_path`, `dir_depth`, `path_components` to `Chunk`; `scope_prefix` to `SearchQuery`
+- `crates/ragfs-store/src/schema.rs` - Added 3 Arrow fields
+- `crates/ragfs-store/src/lancedb.rs` - Updated schema, `chunks_to_batch()`, `batch_to_chunks()`, `search()`, `hybrid_search()` with scope filter
+- `crates/ragfs-index/src/indexer.rs` - `build_chunk()` populates relative TrieHI fields
+- `crates/ragfs-query/src/executor.rs` - `scope_prefix` support via `with_scope()`
+- `crates/ragfs/src/main.rs` - `--scope` CLI flag for `query` command
 
 ---
 
