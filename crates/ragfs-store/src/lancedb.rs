@@ -427,9 +427,9 @@ impl VectorStore for LanceStore {
             .map_err(|e| StoreError::Query(format!("Failed to create search query: {e}")))?;
 
         if let Some(ref scope) = query.scope_prefix {
+            let clean_scope = scope.trim_end_matches('/').replace('\'', "''");
             search_query = search_query.only_if(format!(
-                "dir_path LIKE '{}%'",
-                scope.replace('\'', "''")
+                "dir_path = '{clean_scope}' OR dir_path LIKE '{clean_scope}/%'"
             ));
         }
 
@@ -477,9 +477,9 @@ impl VectorStore for LanceStore {
             .map_err(|e| StoreError::Query(format!("Failed to create hybrid query: {e}")))?;
 
         if let Some(ref scope) = query.scope_prefix {
+            let clean_scope = scope.trim_end_matches('/').replace('\'', "''");
             query_builder = query_builder.only_if(format!(
-                "dir_path LIKE '{}%'",
-                scope.replace('\'', "''")
+                "dir_path = '{clean_scope}' OR dir_path LIKE '{clean_scope}/%'"
             ));
         }
 
