@@ -376,7 +376,7 @@ pub struct SearchQuery {
     pub filters: Vec<SearchFilter>,
     /// Distance metric
     pub metric: DistanceMetric,
-    /// Optional directory scope prefix for TrieHI (e.g., "src/auth/")
+    /// Optional directory scope prefix for `TrieHI` (e.g., "src/auth/")
     pub scope_prefix: Option<String>,
 }
 

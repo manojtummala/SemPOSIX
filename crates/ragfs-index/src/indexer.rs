@@ -717,11 +717,8 @@ fn build_chunk(
     let rel_path = file_path.strip_prefix(root).unwrap_or(file_path);
     let dir_path = rel_path
         .parent()
-        .map_or_else(|| "".to_string(), |p| p.to_string_lossy().to_string());
-    let dir_depth = rel_path
-        .components()
-        .count()
-        .saturating_sub(1) as u16;
+        .map_or_else(String::new, |p| p.to_string_lossy().to_string());
+    let dir_depth = rel_path.components().count().saturating_sub(1) as u16;
     let path_components = rel_path
         .components()
         .map(|c| c.as_os_str().to_string_lossy().to_string())

@@ -517,7 +517,12 @@ async fn main() -> Result<()> {
             drop(progress_handle);
         }
 
-        Commands::Query { path, query, limit, scope } => {
+        Commands::Query {
+            path,
+            query,
+            limit,
+            scope,
+        } => {
             if !path.exists() {
                 anyhow::bail!("Directory does not exist: {}", path.display());
             }

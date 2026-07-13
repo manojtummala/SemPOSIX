@@ -1039,29 +1039,24 @@ fn batch_to_chunks(batch: &RecordBatch) -> Result<Vec<Chunk>, StoreError> {
                 || {
                     PathBuf::from(file_paths.value(i))
                         .parent()
-                        .map_or_else(|| "".to_string(), |p| p.to_string_lossy().to_string())
+                        .map_or_else(String::new, |p| p.to_string_lossy().to_string())
                 },
                 |arr| {
                     if arr.is_null(i) {
-                        "".to_string()
+                        String::new()
                     } else {
                         arr.value(i).to_string()
                     }
                 },
             ),
-            dir_depth: dir_depths.map_or(0, |arr| {
-                if arr.is_null(i) { 0 } else { arr.value(i) }
+            dir_depth: dir_depths.map_or(0, |arr| if arr.is_null(i) { 0 } else { arr.value(i) }),
+            path_components: path_components_arr.map_or_else(String::new, |arr| {
+                if arr.is_null(i) {
+                    String::new()
+                } else {
+                    arr.value(i).to_string()
+                }
             }),
-            path_components: path_components_arr.map_or_else(
-                || "".to_string(),
-                |arr| {
-                    if arr.is_null(i) {
-                        "".to_string()
-                    } else {
-                        arr.value(i).to_string()
-                    }
-                },
-            ),
             metadata: ChunkMetadata::default(),
         });
     }

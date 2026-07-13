@@ -18,7 +18,7 @@ pub struct QueryExecutor {
     parser: QueryParser,
     /// Whether to use hybrid search
     hybrid: bool,
-    /// Optional scope prefix for scoped search (TrieHI)
+    /// Optional scope prefix for scoped search (`TrieHI`)
     scope_prefix: Option<String>,
 }
 
