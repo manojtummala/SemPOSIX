@@ -45,6 +45,11 @@ fn create_test_chunk(file_path: &PathBuf, content: &str, chunk_index: u32, seed:
         parent_chunk_id: None,
         depth: 0,
         embedding: Some(create_random_embedding(EMBEDDING_DIM, seed)),
+        dir_path: file_path
+            .parent()
+            .map_or_else(|| "".to_string(), |p| p.to_string_lossy().to_string()),
+        dir_depth: 0,
+        path_components: file_path.to_string_lossy().to_string(),
         metadata: ChunkMetadata::default(),
     }
 }
@@ -103,6 +108,7 @@ fn search_benchmark(c: &mut Criterion) {
                         limit: 10,
                         filters: vec![],
                         metric: DistanceMetric::Cosine,
+                        scope_prefix: None,
                     };
                     black_box(store.search(query).await)
                 });
@@ -122,6 +128,7 @@ fn search_benchmark(c: &mut Criterion) {
                         limit: 10,
                         filters: vec![],
                         metric: DistanceMetric::Cosine,
+                        scope_prefix: None,
                     };
                     black_box(store.hybrid_search(query).await)
                 });
@@ -146,6 +153,7 @@ fn search_benchmark(c: &mut Criterion) {
                             limit: *limit,
                             filters: vec![],
                             metric: DistanceMetric::Cosine,
+                            scope_prefix: None,
                         };
                         black_box(store.search(query).await)
                     });

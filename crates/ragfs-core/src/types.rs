@@ -110,6 +110,12 @@ pub struct Chunk {
     pub depth: u8,
     /// Embedding vector (if computed)
     pub embedding: Option<Vec<f32>>,
+    /// Hierarchical directory path (e.g., "src/auth")
+    pub dir_path: String,
+    /// Depth in directory tree
+    pub dir_depth: u16,
+    /// Comma-separated path components (e.g., "src,auth,login.rs")
+    pub path_components: String,
     /// Additional metadata
     pub metadata: ChunkMetadata,
 }
@@ -370,6 +376,8 @@ pub struct SearchQuery {
     pub filters: Vec<SearchFilter>,
     /// Distance metric
     pub metric: DistanceMetric,
+    /// Optional directory scope prefix for TrieHI (e.g., "src/auth/")
+    pub scope_prefix: Option<String>,
 }
 
 /// Search filters.
@@ -544,6 +552,9 @@ mod tests {
             parent_chunk_id: None,
             depth: 0,
             embedding: None,
+            dir_path: "/test".to_string(),
+            dir_depth: 1,
+            path_components: "/test,file.rs".to_string(),
             metadata: ChunkMetadata::default(),
         };
 

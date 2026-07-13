@@ -2,7 +2,7 @@
 
 use arrow_array::{
     Array, ArrayRef, FixedSizeListArray, Float32Array, RecordBatch, RecordBatchIterator,
-    StringArray, UInt8Array, UInt32Array, UInt64Array,
+    StringArray, UInt8Array, UInt16Array, UInt32Array, UInt64Array,
 };
 use arrow_schema::{DataType, Field, Schema};
 use async_trait::async_trait;
@@ -113,6 +113,9 @@ impl LanceStore {
             Field::new("language", DataType::Utf8, true),
             Field::new("symbol_type", DataType::Utf8, true),
             Field::new("symbol_name", DataType::Utf8, true),
+            Field::new("dir_path", DataType::Utf8, false),
+            Field::new("dir_depth", DataType::UInt16, false),
+            Field::new("path_components", DataType::Utf8, false),
         ])
     }
 
@@ -260,6 +263,10 @@ impl LanceStore {
 
         let mime_types: Vec<Option<String>> = chunks.iter().map(|c| c.mime_type.clone()).collect();
 
+        let dir_paths: Vec<_> = chunks.iter().map(|c| c.dir_path.clone()).collect();
+        let dir_depths: Vec<_> = chunks.iter().map(|c| c.dir_depth).collect();
+        let path_components: Vec<_> = chunks.iter().map(|c| c.path_components.clone()).collect();
+
         // Build arrays
         let schema = Arc::new(self.chunks_schema());
 
@@ -287,6 +294,9 @@ impl LanceStore {
                 Arc::new(StringArray::from(languages)),
                 Arc::new(StringArray::from(symbol_types)),
                 Arc::new(StringArray::from(symbol_names)),
+                Arc::new(StringArray::from(dir_paths)),
+                Arc::new(UInt16Array::from(dir_depths)),
+                Arc::new(StringArray::from(path_components)),
             ],
         )
         .map_err(|e| StoreError::Insert(format!("Failed to create RecordBatch: {e}")))?;
@@ -412,9 +422,18 @@ impl VectorStore for LanceStore {
 
         let table = self.get_chunks_table().await?;
 
-        let mut results = table
+        let mut search_query = table
             .vector_search(query.embedding.clone())
-            .map_err(|e| StoreError::Query(format!("Failed to create search query: {e}")))?
+            .map_err(|e| StoreError::Query(format!("Failed to create search query: {e}")))?;
+
+        if let Some(ref scope) = query.scope_prefix {
+            search_query = search_query.only_if(format!(
+                "dir_path LIKE '{}%'",
+                scope.replace('\'', "''")
+            ));
+        }
+
+        let mut results = search_query
             .limit(query.limit)
             .execute()
             .await
@@ -451,11 +470,20 @@ impl VectorStore for LanceStore {
         // Build hybrid query combining FTS and vector search
         let fts_query = FullTextSearchQuery::new(query_text);
 
-        let mut results = table
+        let mut query_builder = table
             .query()
             .full_text_search(fts_query)
             .nearest_to(query.embedding.clone())
-            .map_err(|e| StoreError::Query(format!("Failed to create hybrid query: {e}")))?
+            .map_err(|e| StoreError::Query(format!("Failed to create hybrid query: {e}")))?;
+
+        if let Some(ref scope) = query.scope_prefix {
+            query_builder = query_builder.only_if(format!(
+                "dir_path LIKE '{}%'",
+                scope.replace('\'', "''")
+            ));
+        }
+
+        let mut results = query_builder
             .limit(query.limit)
             .execute_hybrid(QueryExecutionOptions::default())
             .await
@@ -927,6 +955,15 @@ fn batch_to_chunks(batch: &RecordBatch) -> Result<Vec<Chunk>, StoreError> {
     let embeddings = batch
         .column_by_name("embedding")
         .and_then(|c| c.as_any().downcast_ref::<FixedSizeListArray>());
+    let dir_paths = batch
+        .column_by_name("dir_path")
+        .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+    let dir_depths = batch
+        .column_by_name("dir_depth")
+        .and_then(|c| c.as_any().downcast_ref::<UInt16Array>());
+    let path_components_arr = batch
+        .column_by_name("path_components")
+        .and_then(|c| c.as_any().downcast_ref::<StringArray>());
 
     let (
         Some(chunk_ids),
@@ -998,6 +1035,33 @@ fn batch_to_chunks(batch: &RecordBatch) -> Result<Vec<Chunk>, StoreError> {
             parent_chunk_id: None,
             depth: depths.value(i),
             embedding,
+            dir_path: dir_paths.map_or_else(
+                || {
+                    PathBuf::from(file_paths.value(i))
+                        .parent()
+                        .map_or_else(|| "".to_string(), |p| p.to_string_lossy().to_string())
+                },
+                |arr| {
+                    if arr.is_null(i) {
+                        "".to_string()
+                    } else {
+                        arr.value(i).to_string()
+                    }
+                },
+            ),
+            dir_depth: dir_depths.map_or(0, |arr| {
+                if arr.is_null(i) { 0 } else { arr.value(i) }
+            }),
+            path_components: path_components_arr.map_or_else(
+                || "".to_string(),
+                |arr| {
+                    if arr.is_null(i) {
+                        "".to_string()
+                    } else {
+                        arr.value(i).to_string()
+                    }
+                },
+            ),
             metadata: ChunkMetadata::default(),
         });
     }
@@ -1121,6 +1185,11 @@ mod tests {
             parent_chunk_id: None,
             depth: 0,
             embedding: Some(embedding),
+            dir_path: file_path
+                .parent()
+                .map_or_else(|| "".to_string(), |p| p.to_string_lossy().to_string()),
+            dir_depth: 0,
+            path_components: file_path.to_string_lossy().to_string(),
             metadata: ChunkMetadata {
                 indexed_at: Some(Utc::now()),
                 embedding_model: Some("test-model".to_string()),
@@ -1255,6 +1324,7 @@ mod tests {
             limit: 10,
             filters: vec![],
             metric: DistanceMetric::Cosine,
+            scope_prefix: None,
         };
 
         let results = store.search(query).await.unwrap();
@@ -1290,6 +1360,7 @@ mod tests {
             limit: 3,
             filters: vec![],
             metric: DistanceMetric::Cosine,
+            scope_prefix: None,
         };
 
         let results = store.search(query).await.unwrap();
@@ -1471,6 +1542,9 @@ mod tests {
             parent_chunk_id: None,
             depth: 0,
             embedding: Some(create_random_embedding(TEST_DIM)),
+            dir_path: "/test".to_string(),
+            dir_depth: 1,
+            path_components: "/test,code.rs".to_string(),
             metadata: ChunkMetadata::default(),
         };
 

@@ -241,6 +241,11 @@ mod tests {
             parent_chunk_id: None,
             depth: 0,
             embedding: Some(embedding),
+            dir_path: std::path::Path::new(path)
+                .parent()
+                .map_or_else(|| "".to_string(), |p| p.to_string_lossy().to_string()),
+            dir_depth: 0,
+            path_components: path.to_string(),
             metadata: ChunkMetadata::default(),
         }
     }
@@ -316,6 +321,7 @@ mod tests {
             limit: 2,
             filters: vec![],
             metric: Default::default(),
+            scope_prefix: None,
         };
 
         let results = store.search(query).await.unwrap();

@@ -62,6 +62,7 @@ impl QueryExecutor {
             limit: parsed.limit,
             filters: parsed.filters,
             metric: DistanceMetric::Cosine,
+            scope_prefix: None,
         };
 
         // Execute search
@@ -98,6 +99,7 @@ impl QueryExecutor {
             limit: parsed.limit,
             filters: parsed.filters,
             metric: DistanceMetric::Cosine,
+            scope_prefix: None,
         };
 
         let results = if self.hybrid {

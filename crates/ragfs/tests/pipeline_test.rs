@@ -102,6 +102,11 @@ fn create_chunk(
         parent_chunk_id: None,
         depth: chunk_output.depth,
         embedding: Some(embedding),
+        dir_path: file_path
+            .parent()
+            .map_or_else(|| "".to_string(), |p| p.to_string_lossy().to_string()),
+        dir_depth: 0,
+        path_components: file_path.to_string_lossy().to_string(),
         metadata: ChunkMetadata {
             embedding_model: Some("mock-embedder".to_string()),
             indexed_at: Some(chrono::Utc::now()),
@@ -207,6 +212,7 @@ async fn test_full_pipeline_extract_chunk_embed_store_search() {
             limit: 5,
             metric: DistanceMetric::Cosine,
             filters: vec![],
+            scope_prefix: None,
         })
         .await
         .unwrap();
@@ -234,6 +240,7 @@ async fn test_full_pipeline_extract_chunk_embed_store_search() {
             limit: 5,
             metric: DistanceMetric::Cosine,
             filters: vec![],
+            scope_prefix: None,
         })
         .await
         .unwrap();
@@ -262,6 +269,7 @@ async fn test_full_pipeline_extract_chunk_embed_store_search() {
             limit: 5,
             metric: DistanceMetric::Cosine,
             filters: vec![],
+            scope_prefix: None,
         })
         .await
         .unwrap();
@@ -389,6 +397,7 @@ async fn test_pipeline_delete_and_reindex() {
             limit: 5,
             metric: DistanceMetric::Cosine,
             filters: vec![],
+            scope_prefix: None,
         })
         .await
         .unwrap();
@@ -466,6 +475,7 @@ async fn test_pipeline_hybrid_search() {
             limit: 5,
             metric: DistanceMetric::Cosine,
             filters: vec![],
+            scope_prefix: None,
         })
         .await
         .unwrap();

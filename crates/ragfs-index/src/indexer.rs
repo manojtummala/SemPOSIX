@@ -705,6 +705,19 @@ fn build_chunk(
     model_name: &str,
     now: chrono::DateTime<Utc>,
 ) -> Chunk {
+    let dir_path = file_path
+        .parent()
+        .map_or_else(|| "".to_string(), |p| p.to_string_lossy().to_string());
+    let dir_depth = dir_path
+        .chars()
+        .filter(|&c| c == std::path::MAIN_SEPARATOR)
+        .count() as u16;
+    let path_components = file_path
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+
     Chunk {
         id: Uuid::new_v4(),
         file_id,
@@ -718,6 +731,9 @@ fn build_chunk(
         parent_chunk_id: None,
         depth: output.depth,
         embedding: Some(embedding),
+        dir_path,
+        dir_depth,
+        path_components,
         metadata: ChunkMetadata {
             embedding_model: Some(model_name.to_string()),
             indexed_at: Some(now),
@@ -1109,6 +1125,8 @@ mod tests {
         assert_eq!(chunk.embedding, Some(embedding));
         assert_eq!(chunk.mime_type, Some("text/plain".to_string()));
         assert!(matches!(chunk.content_type, ContentType::Text));
+        assert_eq!(chunk.dir_path, "/test");
+        assert_eq!(chunk.path_components, "/test,file.txt");
     }
 
     // ==================== IndexerService tests ====================
