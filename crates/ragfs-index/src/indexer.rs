@@ -720,8 +720,8 @@ fn build_chunk(
         .map_or_else(|| "".to_string(), |p| p.to_string_lossy().to_string());
     let dir_depth = rel_path
         .components()
-        .count() as u16
-        .saturating_sub(1);
+        .count()
+        .saturating_sub(1) as u16;
     let path_components = rel_path
         .components()
         .map(|c| c.as_os_str().to_string_lossy().to_string())
