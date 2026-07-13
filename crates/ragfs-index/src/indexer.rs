@@ -168,6 +168,7 @@ impl IndexerService {
         let embedder = Arc::clone(&self.embedder);
         let config = self.config.clone();
         let stats = Arc::clone(&self.stats);
+        let root = self.root.clone();
 
         // Spawn event processing task
         tokio::spawn(async move {
@@ -183,6 +184,7 @@ impl IndexerService {
 
                                 match process_file(
                                     path,
+                                    &root,
                                     &store,
                                     &extractors,
                                     &chunkers,
@@ -235,6 +237,7 @@ impl IndexerService {
 
                                 match process_file(
                                     to,
+                                    &root,
                                     &store,
                                     &extractors,
                                     &chunkers,
@@ -292,6 +295,7 @@ impl IndexerService {
     pub async fn process_single(&self, path: &Path) -> Result<u32> {
         process_file(
             path,
+            &self.root,
             &self.store,
             &self.extractors,
             &self.chunkers,
@@ -323,6 +327,7 @@ impl IndexerService {
 
             match process_file(
                 path,
+                &self.root,
                 &self.store,
                 &self.extractors,
                 &self.chunkers,
@@ -406,6 +411,7 @@ impl IndexerService {
 
                 match process_file(
                     &path,
+                    &self.root,
                     &self.store,
                     &self.extractors,
                     &self.chunkers,
@@ -495,6 +501,7 @@ fn scan_directory(root: &Path, event_tx: &mpsc::Sender<FileEvent>, exclude_patte
 /// Process a file through the full pipeline: extract → chunk → embed → store.
 async fn process_file(
     path: &Path,
+    root: &Path,
     store: &Arc<dyn VectorStore>,
     extractors: &Arc<ExtractorRegistry>,
     chunkers: &Arc<ChunkerRegistry>,
@@ -573,6 +580,7 @@ async fn process_file(
             build_chunk(
                 file_id,
                 path,
+                root,
                 idx as u32,
                 output,
                 emb_output.embedding,
@@ -697,6 +705,7 @@ fn determine_content_type(
 fn build_chunk(
     file_id: Uuid,
     file_path: &Path,
+    root: &Path,
     chunk_index: u32,
     output: ChunkOutput,
     embedding: Vec<f32>,
@@ -705,14 +714,15 @@ fn build_chunk(
     model_name: &str,
     now: chrono::DateTime<Utc>,
 ) -> Chunk {
-    let dir_path = file_path
+    let rel_path = file_path.strip_prefix(root).unwrap_or(file_path);
+    let dir_path = rel_path
         .parent()
         .map_or_else(|| "".to_string(), |p| p.to_string_lossy().to_string());
-    let dir_depth = dir_path
-        .chars()
-        .filter(|&c| c == std::path::MAIN_SEPARATOR)
-        .count() as u16;
-    let path_components = file_path
+    let dir_depth = rel_path
+        .components()
+        .count() as u16
+        .saturating_sub(1);
+    let path_components = rel_path
         .components()
         .map(|c| c.as_os_str().to_string_lossy().to_string())
         .collect::<Vec<_>>()
@@ -1091,7 +1101,8 @@ mod tests {
         use ragfs_core::ChunkOutputMetadata;
 
         let file_id = Uuid::new_v4();
-        let file_path = PathBuf::from("/test/file.txt");
+        let root = PathBuf::from("/project");
+        let file_path = PathBuf::from("/project/src/file.txt");
         let chunk_output = ChunkOutput {
             content: "Test chunk content".to_string(),
             byte_range: 0..18,
@@ -1109,6 +1120,7 @@ mod tests {
         let chunk = build_chunk(
             file_id,
             &file_path,
+            &root,
             0,
             chunk_output,
             embedding.clone(),
@@ -1125,8 +1137,8 @@ mod tests {
         assert_eq!(chunk.embedding, Some(embedding));
         assert_eq!(chunk.mime_type, Some("text/plain".to_string()));
         assert!(matches!(chunk.content_type, ContentType::Text));
-        assert_eq!(chunk.dir_path, "/test");
-        assert_eq!(chunk.path_components, "/test,file.txt");
+        assert_eq!(chunk.dir_path, "src");
+        assert_eq!(chunk.path_components, "src,file.txt");
     }
 
     // ==================== IndexerService tests ====================
