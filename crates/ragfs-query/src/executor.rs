@@ -18,6 +18,8 @@ pub struct QueryExecutor {
     parser: QueryParser,
     /// Whether to use hybrid search
     hybrid: bool,
+    /// Optional scope prefix for scoped search (TrieHI)
+    scope_prefix: Option<String>,
 }
 
 impl QueryExecutor {
@@ -33,6 +35,24 @@ impl QueryExecutor {
             embedder,
             parser: QueryParser::new(default_limit),
             hybrid,
+            scope_prefix: None,
+        }
+    }
+
+    /// Create a new query executor with scope prefix for scoped search.
+    pub fn with_scope(
+        store: Arc<dyn VectorStore>,
+        embedder: Arc<dyn Embedder>,
+        default_limit: usize,
+        hybrid: bool,
+        scope_prefix: Option<String>,
+    ) -> Self {
+        Self {
+            store,
+            embedder,
+            parser: QueryParser::new(default_limit),
+            hybrid,
+            scope_prefix,
         }
     }
 
@@ -62,7 +82,7 @@ impl QueryExecutor {
             limit: parsed.limit,
             filters: parsed.filters,
             metric: DistanceMetric::Cosine,
-            scope_prefix: None,
+            scope_prefix: self.scope_prefix.clone(),
         };
 
         // Execute search
@@ -99,7 +119,7 @@ impl QueryExecutor {
             limit: parsed.limit,
             filters: parsed.filters,
             metric: DistanceMetric::Cosine,
-            scope_prefix: None,
+            scope_prefix: self.scope_prefix.clone(),
         };
 
         let results = if self.hybrid {

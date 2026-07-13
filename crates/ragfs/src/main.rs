@@ -127,6 +127,10 @@ enum Commands {
         /// Maximum results
         #[arg(short, long, default_value = "10")]
         limit: usize,
+
+        /// Scope prefix for scoped search (e.g., "src/auth/")
+        #[arg(short, long)]
+        scope: Option<String>,
     },
 
     /// Show index status
@@ -513,7 +517,7 @@ async fn main() -> Result<()> {
             drop(progress_handle);
         }
 
-        Commands::Query { path, query, limit } => {
+        Commands::Query { path, query, limit, scope } => {
             if !path.exists() {
                 anyhow::bail!("Directory does not exist: {}", path.display());
             }
@@ -536,12 +540,22 @@ async fn main() -> Result<()> {
             store.init().await.context("Failed to initialize store")?;
 
             // Create query executor
-            let executor = QueryExecutor::new(
-                store as Arc<dyn VectorStore>,
-                embedder.document_embedder(),
-                limit,
-                false, // hybrid search
-            );
+            let executor = if scope.is_some() {
+                QueryExecutor::with_scope(
+                    store as Arc<dyn VectorStore>,
+                    embedder.document_embedder(),
+                    limit,
+                    false,
+                    scope,
+                )
+            } else {
+                QueryExecutor::new(
+                    store as Arc<dyn VectorStore>,
+                    embedder.document_embedder(),
+                    limit,
+                    false,
+                )
+            };
 
             // Execute query
             let results = executor
