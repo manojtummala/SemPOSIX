@@ -104,7 +104,7 @@ fn create_chunk(
         embedding: Some(embedding),
         dir_path: file_path
             .parent()
-            .map_or_else(|| "".to_string(), |p| p.to_string_lossy().to_string()),
+            .map_or_else(String::new, |p| p.to_string_lossy().to_string()),
         dir_depth: 0,
         path_components: file_path.to_string_lossy().to_string(),
         metadata: ChunkMetadata {

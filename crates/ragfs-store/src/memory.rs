@@ -243,7 +243,7 @@ mod tests {
             embedding: Some(embedding),
             dir_path: std::path::Path::new(path)
                 .parent()
-                .map_or_else(|| "".to_string(), |p| p.to_string_lossy().to_string()),
+                .map_or_else(String::new, |p| p.to_string_lossy().to_string()),
             dir_depth: 0,
             path_components: path.to_string(),
             metadata: ChunkMetadata::default(),
