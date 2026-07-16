@@ -30,13 +30,14 @@ cargo clippy --all-targets -- -D warnings  # Run clippy
 
 ```bash
 cargo run -- -v index /path/to/dir   # Index with verbose logging
-cargo run -- query /path "search"    # Query the index
+cargo run -- query /path "search"    # Query the index (global)
+cargo run -- query /path "search" --scope src/  # Scoped to src/
 RUST_LOG=debug cargo run -- ...      # Debug logging
 ```
 
 ## Architecture
 
-RAGFS is a FUSE filesystem for semantic search using vector embeddings. It's organized as a Rust workspace with 9 crates following a pipeline pattern:
+RAGFS is a FUSE filesystem for semantic search using vector embeddings. It's organized as a Rust workspace with 8 crates following a pipeline pattern:
 
 ```
 File → Extraction → Chunking → Embedding → Storage → Search
@@ -112,3 +113,6 @@ File → Extraction → Chunking → Embedding → Storage → Search
 - Content-addressed storage using blake3 hashing
 - Embeddings are generated locally (offline after first model download)
 - Storage: `~/.local/share/ragfs/indices/` and `~/.local/share/ragfs/models/`
+- **TrieHI fields** on each `Chunk`: `dir_path` (relative parent dir), `dir_depth` (u16), `path_components` (comma-separated)
+- **Scoped search**: `SearchQuery.scope_prefix` applies LanceDB `only_if()` predicate pushdown
+- **CI**: 4 jobs — check, fmt, clippy (`-D warnings`), test

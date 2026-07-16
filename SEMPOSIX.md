@@ -1,6 +1,6 @@
 # SemPOSIX: OS-Native Semantic Filesystem for AI Agents
 
-> **Reference Document** - Last updated: 2026-07-11
+> **Reference Document** - Last updated: 2026-07-16
 > Foundation: ragfs v0.2.0 (Forked from Venere-Labs/ragfs)
 
 ---
@@ -12,7 +12,7 @@
 3. [Current Codebase Map](#3-current-codebase-map)
 4. [Phase 1: Bootstrap & FUSE Verification ✅](#4-phase-1-bootstrap--fuse-verification--completed)
 5. [Phase 2: Virtual Query Directory Mapping (.similarity)](#5-phase-2-virtual-query-directory-mapping-similarity)
-6. [Phase 3: TrieHI Integration in LanceDB](#6-phase-3-triehi-integration-in-lancedb)
+6. [Phase 3: TrieHI Integration in LanceDB ✅](#6-phase-3-triehi-integration-in-lancedb-)
 7. [Phase 4: Multi-Tiered Shadow Files (.L0, .L1, .L2)](#7-phase-4-multi-tiered-shadow-files-l0-l1-l2)
 8. [Phase 5: AST-Aware Incremental Indexing](#8-phase-5-ast-aware-incremental-indexing)
 9. [Phase 6: End-to-End Evaluation](#9-phase-6-end-to-end-evaluation)
@@ -784,7 +784,7 @@ multipass mount /Users/manoj/SemPOSIX semposix-dev:/media/ubuntu/SemPOSIX
 |-------|---------------|-----------|
 | Phase 1 | `main.rs` (FUSE thread fix), `filesystem.rs` (setattr/create handlers) | `setup-ubuntu.sh`, `SEMPOSIX.md` |
 | Phase 2 | `filesystem.rs`, `inode.rs`, `lancedb.rs` | None |
-| Phase 3 | `schema.rs`, `lancedb.rs`, `types.rs`, `indexer.rs`, `filesystem.rs` | None |
+| Phase 3 | `schema.rs`, `lancedb.rs`, `types.rs`, `indexer.rs`, `main.rs`, `executor.rs` | None |
 | Phase 4 | `filesystem.rs`, `inode.rs`, `code.rs` | `crates/ragfs-chunker/src/summary.rs` |
 | Phase 5 | `indexer.rs`, `watcher.rs`, `schema.rs`, `types.rs` | `crates/ragfs-chunker/src/diff.rs` |
 | Phase 6 | None (evaluation only) | `test_agent.sh` |

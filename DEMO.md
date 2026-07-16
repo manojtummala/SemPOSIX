@@ -1,7 +1,7 @@
 # SemPOSIX Demo: Progress Showcase
 
 > Live demo script showing SemPOSIX capabilities vs vanilla POSIX.
-> Last verified: 2026-07-11
+> Last verified: 2026-07-13
 
 ---
 
@@ -316,7 +316,50 @@ $ cat /home/ubuntu/test-mount/.ragfs/.similar/auth.rs
 
 ---
 
-## Demo 5: Virtual Directory as Agent Interface
+## Demo 5: Scoped Vector Search (Phase 3 — NEW)
+
+### Prompt: "Search only in src/ for authentication code"
+
+#### Vanilla POSIX
+```bash
+$ grep -r "authentication" src/   # Manual scope, text-only
+```
+
+#### SemPOSIX (CLI)
+```bash
+$ ragfs query /project "authentication" --scope src/
+```
+
+### Output (Verified)
+```
+Query: authentication
+1. /project/src/auth.rs (score: 0.423)
+2. /project/src/main.rs (score: 0.418)
+3. /project/src/database.rs (score: 0.395)
+```
+Only `src/` results — docs and tests filtered out by LanceDB predicate pushdown.
+
+#### SemPOSIX (global vs scoped)
+```bash
+# Global: returns all 6 files
+$ ragfs query /project "authentication"
+
+# Scoped to src/: returns only 3 src files
+$ ragfs query /project "authentication" --scope src/
+
+# Scoped to docs/: returns only 2 docs files
+$ ragfs query /project "authentication" --scope docs/
+```
+
+### What this shows
+- **TrieHI** stores `dir_path`, `dir_depth`, `path_components` per chunk at index time
+- At search time, `--scope` applies `WHERE dir_path = 'X' OR dir_path LIKE 'X/%'` via LanceDB predicate pushdown
+- No post-filtering — irrelevant vectors never leave disk
+- Scoped search works from CLI (`--scope` flag); FUSE integration pending (Phase 4)
+
+---
+
+## Demo 6: Virtual Directory as Agent Interface
 
 An AI agent doesn't need special APIs. It uses **standard POSIX operations**:
 
